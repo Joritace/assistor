@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nav Assist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Visible status -->
+    <div class="top-status" id="overlayStatus">Starting camera...</div>
+
+    <!-- Main camera view -->
+    <main class="viewer-card">
+      <div class="viewer-header">Environment View</div>
+
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" hidden></canvas>
+
+        <!-- optional subtle overlay -->
+        <div class="video-overlay"></div>
+      </div>
+    </main>
+
+    <!-- Guidance text -->
+    <section class="guidance-card">
+      <div class="guidance-label">Guidance</div>
+      <div class="guidance-text" id="messageText">Waiting for scene analysis...</div>
+    </section>
+
+    <!-- Hidden elements still required by the JavaScript logic -->
+    <div class="hidden-elements" aria-hidden="true">
+      <span id="statusText">Initializing...</span>
+      <span id="decisionText">---</span>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
