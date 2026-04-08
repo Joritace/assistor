@@ -64,7 +64,6 @@ def predict():
                 "error": "Decoded image is empty"
             }), 400
 
-        # send the actual image to hugging face
         ml_result = predict_from_ml_service(image_data)
 
         if not ml_result.get("ok"):
@@ -74,7 +73,6 @@ def predict():
                 "details": ml_result
             }), 500
 
-        # apply backend safety rules here
         safe_result = apply_safety_rules(ml_result)
 
         return jsonify({

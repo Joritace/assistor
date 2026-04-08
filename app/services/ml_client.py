@@ -9,12 +9,9 @@ USE_MOCK_ML = os.getenv("USE_MOCK_ML", "true").lower() == "true"
 
 
 def predict_from_ml_service(image_data: str) -> dict:
-    """
-    this sends the frontend image to the hf ml service
-
-    for now the hf service handles:
-    image -> grounding dino -> feature builder -> lightgbm decision
-    """
+    # this sends the image from the backend to the hugging face ml service
+    # the hf service now handles:
+    # image -> grounding dino -> feature builder -> decision model
     if USE_MOCK_ML:
         return {
             "ok": False,
@@ -31,7 +28,7 @@ def predict_from_ml_service(image_data: str) -> dict:
         response = requests.post(
             ML_SERVICE_URL,
             json={"image": image_data},
-            timeout=60
+            timeout=90
         )
 
         if response.status_code != 200:
