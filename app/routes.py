@@ -69,6 +69,7 @@ def predict():
         if not ml_result.get("ok"):
             return jsonify({
                 "ok": False,
+                "stage": "ml_service",
                 "error": "ML service failed",
                 "details": ml_result
             }), 500
@@ -87,7 +88,10 @@ def predict():
         })
 
     except Exception as e:
+        import traceback
         return jsonify({
             "ok": False,
-            "error": str(e)
+            "stage": "railway_predict_exception",
+            "error": str(e),
+            "trace": traceback.format_exc()
         }), 500
