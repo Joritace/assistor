@@ -8,44 +8,17 @@ ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "")
 USE_MOCK_ML = os.getenv("USE_MOCK_ML", "true").lower() == "true"
 
 
-def get_mock_payload() -> dict:
+def predict_from_ml_service(image_data: str) -> dict:
     """
-    Temporary sample detections used until the real RT/ML service is deployed.
-    """
-    return {
-        "image_width": 1280,
-        "image_height": 720,
-        "detections": [
-            {
-                "class_name": "stairs",
-                "confidence": 0.92,
-                "bbox": [820, 420, 1180, 710]
-            },
-            {
-                "class_name": "road",
-                "confidence": 0.88,
-                "bbox": [20, 430, 430, 715]
-            },
-            {
-                "class_name": "person",
-                "confidence": 0.79,
-                "bbox": [520, 260, 700, 670]
-            }
-        ]
-    }
+    this sends the frontend image to the hf ml service
 
-
-def predict_from_ml_service() -> dict:
-    """
-    Calls the external ML service.
-    For now, Flask sends a temporary structured payload.
-    Later, this can be changed to send the image itself or RT detections.
+    for now the hf service handles:
+    image -> grounding dino -> feature builder -> lightgbm decision
     """
     if USE_MOCK_ML:
         return {
-            "ok": True,
-            "mock_mode": True,
-            "payload": get_mock_payload()
+            "ok": False,
+            "error": "USE_MOCK_ML is still true"
         }
 
     if not ML_SERVICE_URL:
@@ -57,8 +30,8 @@ def predict_from_ml_service() -> dict:
     try:
         response = requests.post(
             ML_SERVICE_URL,
-            json=get_mock_payload(),
-            timeout=30
+            json={"image": image_data},
+            timeout=60
         )
 
         if response.status_code != 200:
@@ -68,12 +41,7 @@ def predict_from_ml_service() -> dict:
                 "details": response.text
             }
 
-        data = response.json()
-        return {
-            "ok": True,
-            "mock_mode": False,
-            "payload": data
-        }
+        return response.json()
 
     except Exception as e:
         return {
