@@ -4,30 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "")
-USE_MOCK_ML = os.getenv("USE_MOCK_ML", "true").lower() == "true"
+ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://127.0.0.1:7860/predict")
 
 
-def predict_from_ml_service(image_data: str) -> dict:
-    # this sends the image from the backend to the hugging face ml service
-    # the hf service now handles:
-    # image -> grounding dino -> feature builder -> decision model
-    if USE_MOCK_ML:
-        return {
-            "ok": False,
-            "error": "USE_MOCK_ML is still true"
-        }
-
-    if not ML_SERVICE_URL:
-        return {
-            "ok": False,
-            "error": "ML_SERVICE_URL is not configured"
-        }
-
+def predict_from_ml_service(payload: dict) -> dict:
     try:
         response = requests.post(
             ML_SERVICE_URL,
-            json={"image": image_data},
+            json=payload,
             timeout=90
         )
 
