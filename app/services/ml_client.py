@@ -7,11 +7,11 @@ load_dotenv()
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://127.0.0.1:7860/predict")
 
 
-def predict_from_ml_service(payload: dict) -> dict:
+def predict_from_ml_service(image_data: str) -> dict:
     try:
         response = requests.post(
             ML_SERVICE_URL,
-            json=payload,
+            json={"image": image_data},
             timeout=90
         )
 
