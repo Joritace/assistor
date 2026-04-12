@@ -68,14 +68,8 @@ def has_close_danger_in_zone(enriched_detections: List[Dict[str, Any]], zone: st
             return True
     return False
 
-
+#Pick the first useful class name from a comma-separated summary.
 def first_meaningful_object(summary: str) -> str:
-    """
-    Pick the first useful class name from a comma-separated summary.
-    Example:
-    'stairs, wall' -> 'stairs'
-    'none' -> ''
-    """
     if not summary:
         return ""
 
@@ -88,14 +82,8 @@ def first_meaningful_object(summary: str) -> str:
 
     return parts[0]
 
-
+# Generate a user friendly phrase describing the object and its location based on the zone.
 def zone_phrase(summary: str, zone_name: str) -> str:
-    """
-    Build phrases like:
-    - 'stairs on the right'
-    - 'person ahead'
-    - 'wall on the left'
-    """
     obj = first_meaningful_object(summary)
     if not obj:
         return ""
@@ -154,16 +142,8 @@ def build_guidance_message(final_decision: str, scene_flags: Dict[str, Any]) -> 
 
     return "Proceed carefully."
 
-
+# function to apply safety rules on top of the ML model's decision.
 def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    decision_result should contain:
-    - decision
-    - decision_confidence
-    - features
-    - scene_flags
-    - enriched_detections
-    """
 
     model_decision = str(decision_result.get("decision", "Stop"))
     scene_flags = decision_result.get("scene_flags", {})

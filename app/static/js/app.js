@@ -17,7 +17,7 @@ function setStatus(text) {
   if (statusText) statusText.textContent = text;
   if (overlayStatus) overlayStatus.textContent = text;
 }
-
+// Initialize the camera and start the video stream
 async function startCamera() {
   try {
     setStatus("Requesting camera permission...");
@@ -47,7 +47,7 @@ async function startCamera() {
     }
   }
 }
-
+// Capture the current video frame and return it as a base64-encoded JPEG image
 function captureFrame() {
   const context = canvas.getContext("2d");
 
@@ -58,7 +58,7 @@ function captureFrame() {
 
   return canvas.toDataURL("image/jpeg", 0.8);
 }
-
+// Send the captured frame to the ml service for prediction and handle the response
 async function sendFrame() {
   if (isSending) return;
   if (!video.srcObject) return;
@@ -137,7 +137,7 @@ function startDetection() {
   if (detectionInterval) return;
 
   sendFrame();
-  detectionInterval = setInterval(sendFrame, 3000);
+  detectionInterval = setInterval(sendFrame, 400);
 }
 
 window.addEventListener("load", () => {
