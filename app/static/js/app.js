@@ -133,11 +133,17 @@ function speakMessage(message, cooldownSeconds = 3) {
   lastSpokenTime = now;
 }
 
+async function detectionLoop() {
+  while (video.srcObject) {
+    await sendFrame(); // wait until request finishes
+    await new Promise((r) => setTimeout(r, 150)); // small delay
+  }
+}
+
 function startDetection() {
   if (detectionInterval) return;
-
-  sendFrame();
-  detectionInterval = setInterval(sendFrame, 400);
+  detectionInterval = true; // just a flag now
+  detectionLoop();
 }
 
 window.addEventListener("load", () => {
