@@ -51,12 +51,16 @@ async function startCamera() {
 function captureFrame() {
   const context = canvas.getContext("2d");
 
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
+  const targetWidth = 320;
+  const scale = targetWidth / video.videoWidth;
+  const targetHeight = Math.round(video.videoHeight * scale);
 
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
 
-  return canvas.toDataURL("image/jpeg", 0.8);
+  context.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+  return canvas.toDataURL("image/jpeg", 0.45);
 }
 // Send the captured frame to the ml service for prediction and handle the response
 async function sendFrame() {
