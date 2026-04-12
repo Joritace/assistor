@@ -12,7 +12,7 @@ def predict_from_ml_service(image_data: str) -> dict:
         response = requests.post(
             ML_SERVICE_URL,
             json={"image": image_data},
-            timeout=15
+            timeout=20
         )
 
         if response.status_code != 200:
