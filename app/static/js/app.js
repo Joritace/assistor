@@ -122,7 +122,7 @@ async function sendFrame() {
     }
 
     setStatus("Guidance active");
-    speakMessage(message, 5);
+    speakMessage(message, 8);
   } catch (error) {
     console.error("Send frame error:", error);
     setStatus("Connection error");
