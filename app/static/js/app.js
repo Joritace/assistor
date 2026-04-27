@@ -15,7 +15,7 @@ let audioUnlocked = false;
 // 🔴 speech control
 let lastSpeechKey = "";
 let lastSpeechTime = 0;
-const SPEAK_GAP_MS = 5000;
+const SPEAK_GAP_MS = 10000;
 
 
 // ================= AUDIO UNLOCK =================
