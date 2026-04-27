@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 DANGEROUS_CLASSES = {
     "up_stairs",
     "down_stairs",
+    "stairs",
     "car",
     "vehicle",
     "motorcycle",
@@ -14,6 +15,7 @@ DANGEROUS_CLASSES = {
     "traffic_light",
     "animal",
     "pothole",
+    "obstacle",
     "road",
 }
 
@@ -21,13 +23,14 @@ SAFE_PATH_CLASSES = {
     "footpath",
     "sidewalk",
     "zebra_crossing",
+  
 }
 
 BLOCKING_CLASSES = {
     "person",
-    "stairs",
     "up_stairs",
     "down_stairs",
+    "stairs",
     "car",
     "vehicle",
     "motorcycle",
@@ -37,8 +40,21 @@ BLOCKING_CLASSES = {
     "tree",
     "traffic_light",
     "animal",
-    "obstacle",
     "pothole",
+    "obstacle",
+    "road",
+}
+
+
+OBSTACLE_DISPLAY_CLASSES = {
+    "animal",
+    "vehicle",
+    "car",
+    "motorcycle",
+    "tree",
+    "pothole",
+    "traffic_light",
+    "train",
 }
 
 
@@ -50,9 +66,26 @@ def contains_any(values: List[str], candidates: set) -> bool:
     return any(v in candidates for v in values)
 
 
-def zone_has_danger(zone_objects: List[str]) -> bool:
-    zone_objects = normalize_list(zone_objects)
-    return contains_any(zone_objects, DANGEROUS_CLASSES)
+def display_class_for_safety(obj: str) -> str:
+    obj = str(obj).strip().lower()
+
+    if obj in OBSTACLE_DISPLAY_CLASSES:
+        return "obstacle"
+
+    return obj
+
+
+def make_object_readable(obj: str) -> str:
+    obj = display_class_for_safety(obj)
+
+    readable = {
+        "up_stairs": "up stairs",
+        "down_stairs": "down stairs",
+        "zebra_crossing": "zebra crossing",
+        "traffic_light": "traffic light",
+    }
+
+    return readable.get(obj, obj.replace("_", " "))
 
 
 def zone_has_safe_path(zone_objects: List[str]) -> bool:
@@ -60,8 +93,23 @@ def zone_has_safe_path(zone_objects: List[str]) -> bool:
     return contains_any(zone_objects, SAFE_PATH_CLASSES)
 
 
+def zone_has_danger(zone_objects: List[str]) -> bool:
+    zone_objects = normalize_list(zone_objects)
+
+    # safe path should not be treated as danger
+    if contains_any(zone_objects, SAFE_PATH_CLASSES):
+        return False
+
+    return contains_any(zone_objects, DANGEROUS_CLASSES)
+
+
 def zone_is_blocked(zone_objects: List[str]) -> bool:
     zone_objects = normalize_list(zone_objects)
+
+    # footpath/sidewalk/zebra crossing/road means the zone is walkable
+    if contains_any(zone_objects, SAFE_PATH_CLASSES):
+        return False
+
     return contains_any(zone_objects, BLOCKING_CLASSES)
 
 
@@ -78,6 +126,10 @@ def has_close_danger_in_zone(
         if det_zone != zone:
             continue
 
+        # safe path ahead is not danger
+        if raw_class in SAFE_PATH_CLASSES:
+            return False
+
         is_danger = raw_class in DANGEROUS_CLASSES or class_name in DANGEROUS_CLASSES
         is_close = det_band in {"within_2m", "within_4m"}
 
@@ -93,26 +145,10 @@ def first_meaningful_object(summary: str) -> str:
 
     parts = [p.strip().lower() for p in summary.split(",") if p.strip()]
 
-    if not parts:
-        return ""
-
-    if parts[0] == "none":
+    if not parts or parts[0] == "none":
         return ""
 
     return parts[0]
-
-
-def make_object_readable(obj: str) -> str:
-    obj = str(obj).strip().lower()
-
-    readable = {
-        "up_stairs": "up stairs",
-        "down_stairs": "down stairs",
-        "zebra_crossing": "zebra crossing",
-        "traffic_light": "traffic light",
-    }
-
-    return readable.get(obj, obj.replace("_", " "))
 
 
 def zone_phrase(summary: str, zone_name: str) -> str:
@@ -130,23 +166,12 @@ def zone_phrase(summary: str, zone_name: str) -> str:
 
 
 def get_zone_summary(scene_flags: Dict[str, Any], zone: str) -> str:
-    # Prefer raw YOLO class summary for human safety messages
     return str(
         scene_flags.get(
             f"{zone}_raw_summary",
             scene_flags.get(f"{zone}_summary", "none")
         )
     )
-
-
-def get_zone_raw_objects(scene_flags: Dict[str, Any], zone: str) -> List[str]:
-    raw_objects = scene_flags.get(f"{zone}_raw_objects")
-
-    if isinstance(raw_objects, list):
-        return normalize_list(raw_objects)
-
-    summary = get_zone_summary(scene_flags, zone)
-    return normalize_list(summary.split(","))
 
 
 def get_zone_all_objects(scene_flags: Dict[str, Any], zone: str) -> List[str]:
@@ -169,7 +194,6 @@ def choose_careful_direction(scene_flags: Dict[str, Any]) -> str:
     center_all = get_zone_all_objects(scene_flags, "center")
     right_all = get_zone_all_objects(scene_flags, "right")
 
-    # If all directions have obstacles, stairs may still be a careful route.
     if zone_has_stairs(left_all):
         return "Move Left"
 
@@ -191,57 +215,47 @@ def build_guidance_message(final_decision: str, scene_flags: Dict[str, Any]) -> 
     center_phrase = zone_phrase(center_summary, "center")
     right_phrase = zone_phrase(right_summary, "right")
 
+    center_obj = first_meaningful_object(center_summary)
+    left_obj = first_meaningful_object(left_summary)
+    right_obj = first_meaningful_object(right_summary)
+
     if final_decision == "Stop":
+        if center_obj in SAFE_PATH_CLASSES:
+            return "Keep forward carefully. Path appears clear."
         if center_phrase:
             return f"Stop. {center_phrase.capitalize()}."
-        if left_phrase:
-            return f"Stop. {left_phrase.capitalize()}."
-        if right_phrase:
-            return f"Stop. {right_phrase.capitalize()}."
         return "Stop. Path is not safe."
 
     if final_decision == "Move Left":
-        left_obj = first_meaningful_object(left_summary)
-
         if left_obj in {"up_stairs", "down_stairs", "stairs"}:
             return f"Move left carefully. {make_object_readable(left_obj).capitalize()} on the left."
 
-        reasons = []
-        if center_phrase:
-            reasons.append(center_phrase)
-        if right_phrase:
-            reasons.append(right_phrase)
-
-        if reasons:
+        if center_phrase or right_phrase:
+            reasons = [p for p in [center_phrase, right_phrase] if p]
             return f"Move left carefully. {', '.join(reasons).capitalize()}."
+
         return "Move left carefully."
 
     if final_decision == "Move Right":
-        right_obj = first_meaningful_object(right_summary)
-
         if right_obj in {"up_stairs", "down_stairs", "stairs"}:
             return f"Move right carefully. {make_object_readable(right_obj).capitalize()} on the right."
 
-        reasons = []
-        if center_phrase:
-            reasons.append(center_phrase)
-        if left_phrase:
-            reasons.append(left_phrase)
-
-        if reasons:
+        if center_phrase or left_phrase:
+            reasons = [p for p in [center_phrase, left_phrase] if p]
             return f"Move right carefully. {', '.join(reasons).capitalize()}."
+
         return "Move right carefully."
 
     if final_decision == "Move Forward":
-        center_obj = first_meaningful_object(center_summary)
-
         if center_obj in {"up_stairs", "down_stairs", "stairs"}:
             return f"Move forward carefully. {make_object_readable(center_obj).capitalize()} ahead."
 
+        if center_obj in SAFE_PATH_CLASSES:
+            return "Keep forward carefully. Path appears clear."
+
         if left_phrase and right_phrase:
             return f"Keep forward carefully. {left_phrase.capitalize()}, {right_phrase}."
-        if center_phrase:
-            return f"Keep forward carefully. {center_phrase.capitalize()}."
+
         return "Keep forward carefully. Path appears clear."
 
     return "Proceed carefully."
@@ -257,13 +271,13 @@ def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
     center_all = get_zone_all_objects(scene_flags, "center")
     right_all = get_zone_all_objects(scene_flags, "right")
 
-    left_danger = zone_has_danger(left_all) or has_close_danger_in_zone(enriched_detections, "left")
-    center_danger = zone_has_danger(center_all) or has_close_danger_in_zone(enriched_detections, "center")
-    right_danger = zone_has_danger(right_all) or has_close_danger_in_zone(enriched_detections, "right")
-
     left_safe_path = zone_has_safe_path(left_all)
     center_safe_path = zone_has_safe_path(center_all)
     right_safe_path = zone_has_safe_path(right_all)
+
+    left_danger = zone_has_danger(left_all) or has_close_danger_in_zone(enriched_detections, "left")
+    center_danger = zone_has_danger(center_all) or has_close_danger_in_zone(enriched_detections, "center")
+    right_danger = zone_has_danger(right_all) or has_close_danger_in_zone(enriched_detections, "right")
 
     left_blocked = zone_is_blocked(left_all)
     center_blocked = zone_is_blocked(center_all)
@@ -272,8 +286,12 @@ def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
     final_decision = model_decision
     override_reason = None
 
-    # Rule 1: If center is unsafe, do not move forward blindly.
-    if model_decision == "Move Forward" and (center_danger or center_blocked):
+    # If the center is a safe walking path, allow forward movement.
+    if center_safe_path:
+        final_decision = "Move Forward"
+        override_reason = "Safe path ahead"
+
+    elif model_decision == "Move Forward" and (center_danger or center_blocked):
         if left_safe_path and not left_danger and not left_blocked:
             final_decision = "Move Left"
             override_reason = "Center unsafe, left safer"
@@ -284,7 +302,6 @@ def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
             final_decision = "Stop"
             override_reason = "Center unsafe and no clear alternative"
 
-    # Rule 2: If model chooses right but right is unsafe, override.
     if model_decision == "Move Right" and (right_danger or right_blocked):
         if left_safe_path and not left_danger and not left_blocked:
             final_decision = "Move Left"
@@ -296,7 +313,6 @@ def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
             final_decision = "Stop"
             override_reason = "Right unsafe and no safe alternative"
 
-    # Rule 3: If model chooses left but left is unsafe, override.
     if model_decision == "Move Left" and (left_danger or left_blocked):
         if right_safe_path and not right_danger and not right_blocked:
             final_decision = "Move Right"
@@ -308,7 +324,6 @@ def apply_safety_rules(decision_result: Dict[str, Any]) -> Dict[str, Any]:
             final_decision = "Stop"
             override_reason = "Left unsafe and no safe alternative"
 
-    # Rule 4: If all zones are unsafe, allow careful stairs route if present.
     if (
         (left_danger or left_blocked)
         and (center_danger or center_blocked)
