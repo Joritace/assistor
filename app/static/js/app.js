@@ -10,15 +10,11 @@ let stream = null;
 let detectionInterval = null;
 let isSending = false;
 
+let lastSpokenMessage = "";
+let lastSpokenTime = 0;
+
 let audioUnlocked = false;
 
-// 🔴 speech control
-let lastSpeechKey = "";
-let lastSpeechTime = 0;
-const SPEAK_GAP_MS = 10000;
-
-
-// ================= AUDIO UNLOCK =================
 function unlockAudio() {
   if (audioUnlocked) return;
 
@@ -34,21 +30,19 @@ function unlockAudio() {
   window.speechSynthesis.speak(test);
 }
 
-
-// ================= STATUS =================
 function setStatus(text) {
   if (statusText) statusText.textContent = text;
   if (overlayStatus) overlayStatus.textContent = text;
 }
 
-
-// ================= CAMERA =================
 async function startCamera() {
   try {
     setStatus("Requesting camera permission...");
 
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
+      video: {
+        facingMode: "environment"
+      },
       audio: false
     });
 
@@ -62,7 +56,6 @@ async function startCamera() {
 
     setStatus("Guidance active");
     startDetection();
-
   } catch (error) {
     console.error("Camera error:", error);
     setStatus("Camera unavailable");
@@ -73,8 +66,6 @@ async function startCamera() {
   }
 }
 
-
-// ================= FRAME CAPTURE =================
 function captureFrame() {
   const context = canvas.getContext("2d");
 
@@ -90,8 +81,6 @@ function captureFrame() {
   return canvas.toDataURL("image/jpeg", 0.45);
 }
 
-
-// ================= SEND FRAME =================
 async function sendFrame() {
   if (isSending) return;
   if (!video.srcObject) return;
@@ -124,24 +113,24 @@ async function sendFrame() {
       result.message ||
       "No guidance available";
 
-    if (decisionText) decisionText.textContent = decision;
-    if (messageText) messageText.textContent = message;
+    if (decisionText) {
+      decisionText.textContent = decision;
+    }
+
+    if (messageText) {
+      messageText.textContent = message;
+    }
 
     setStatus("Guidance active");
-
-    speakMessage(message);
-
+    speakMessage(message, 5);
   } catch (error) {
     console.error("Send frame error:", error);
     setStatus("Connection error");
-
   } finally {
     isSending = false;
   }
 }
 
-
-// ================= SPEECH CONTROL =================
 function cleanMessage(message) {
   return String(message || "")
     .trim()
@@ -149,45 +138,37 @@ function cleanMessage(message) {
     .replace(/\s+/g, " ");
 }
 
-
-function speakMessage(message) {
+function speakMessage(message, cooldownSeconds = 5) {
   if (!message) return;
   if (!audioUnlocked) return;
 
   const now = Date.now();
-  const speechKey = cleanMessage(message);
+  const cooldownMs = cooldownSeconds * 1000;
 
-  // ❌ SAME MESSAGE within 5 seconds → ignore
-  if (speechKey === lastSpeechKey && now - lastSpeechTime < SPEAK_GAP_MS) {
+  const cleanedMessage = cleanMessage(message);
+  const cleanedLast = cleanMessage(lastSpokenMessage);
+
+  const instructionChanged = cleanedMessage !== cleanedLast;
+  const enoughTimePassed = now - lastSpokenTime >= cooldownMs;
+
+  if (!instructionChanged && !enoughTimePassed) {
     return;
   }
 
-  // ❌ ANY speech too soon → ignore
-  if (now - lastSpeechTime < SPEAK_GAP_MS) {
-    return;
-  }
-
-  speakNow(message);
-
-  lastSpeechKey = speechKey;
-  lastSpeechTime = now;
-}
-
-
-function speakNow(message) {
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "en-US";
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
+  utterance.lang = "en-US";
 
   window.speechSynthesis.speak(utterance);
+
+  lastSpokenMessage = message;
+  lastSpokenTime = now;
 }
 
-
-// ================= LOOP =================
 async function detectionLoop() {
   while (video.srcObject) {
     await sendFrame();
@@ -195,21 +176,16 @@ async function detectionLoop() {
   }
 }
 
-
 function startDetection() {
   if (detectionInterval) return;
-
   detectionInterval = true;
   detectionLoop();
 }
 
-
-// ================= EVENTS =================
 document.addEventListener("DOMContentLoaded", () => {
   document.body.addEventListener("click", unlockAudio, { once: true });
   document.body.addEventListener("touchstart", unlockAudio, { once: true });
 });
-
 
 window.addEventListener("load", () => {
   startCamera();
