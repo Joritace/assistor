@@ -12,15 +12,13 @@ let isSending = false;
 
 let audioUnlocked = false;
 
-let lastSpokenMessage = "";
-let lastSpokenTime = 0;
-
-let lastReceivedMessage = "";
-let lastChangeTime = 0;
-
-const STABLE_SPEAK_DELAY = 5000; // speak again if same instruction stays for 5 seconds
+// 🔴 speech control
+let lastSpeechKey = "";
+let lastSpeechTime = 0;
+const SPEAK_GAP_MS = 5000;
 
 
+// ================= AUDIO UNLOCK =================
 function unlockAudio() {
   if (audioUnlocked) return;
 
@@ -37,21 +35,20 @@ function unlockAudio() {
 }
 
 
+// ================= STATUS =================
 function setStatus(text) {
   if (statusText) statusText.textContent = text;
   if (overlayStatus) overlayStatus.textContent = text;
 }
 
 
-// Initialize the camera and start the video stream
+// ================= CAMERA =================
 async function startCamera() {
   try {
     setStatus("Requesting camera permission...");
 
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment"
-      },
+      video: { facingMode: "environment" },
       audio: false
     });
 
@@ -77,7 +74,7 @@ async function startCamera() {
 }
 
 
-// Capture the current video frame and return it as a base64 image
+// ================= FRAME CAPTURE =================
 function captureFrame() {
   const context = canvas.getContext("2d");
 
@@ -94,7 +91,7 @@ function captureFrame() {
 }
 
 
-// Send frame to backend/ML service
+// ================= SEND FRAME =================
 async function sendFrame() {
   if (isSending) return;
   if (!video.srcObject) return;
@@ -127,15 +124,11 @@ async function sendFrame() {
       result.message ||
       "No guidance available";
 
-    if (decisionText) {
-      decisionText.textContent = decision;
-    }
-
-    if (messageText) {
-      messageText.textContent = message;
-    }
+    if (decisionText) decisionText.textContent = decision;
+    if (messageText) messageText.textContent = message;
 
     setStatus("Guidance active");
+
     speakMessage(message);
 
   } catch (error) {
@@ -148,42 +141,39 @@ async function sendFrame() {
 }
 
 
-// Decides WHEN to speak
-function speakMessage(message) {
-  if (!message) return;
-
-  // iPhone needs a tap first before speech can work
-  if (!audioUnlocked) return;
-
-  const now = Date.now();
-
-  // first instruction ever
-  if (!lastReceivedMessage) {
-    speakNow(message);
-    lastReceivedMessage = message;
-    lastChangeTime = now;
-    return;
-  }
-
-  // speak immediately if instruction changes
-  if (message !== lastReceivedMessage) {
-    speakNow(message);
-    lastReceivedMessage = message;
-    lastChangeTime = now;
-    return;
-  }
-
-  // if same instruction remains for 5 seconds, remind the user
-  const timeSinceLastRepeat = now - lastChangeTime;
-
-  if (timeSinceLastRepeat >= STABLE_SPEAK_DELAY) {
-    speakNow(message);
-    lastChangeTime = now;
-  }
+// ================= SPEECH CONTROL =================
+function cleanMessage(message) {
+  return String(message || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 
-// Actually speaks the message
+function speakMessage(message) {
+  if (!message) return;
+  if (!audioUnlocked) return;
+
+  const now = Date.now();
+  const speechKey = cleanMessage(message);
+
+  // ❌ SAME MESSAGE within 5 seconds → ignore
+  if (speechKey === lastSpeechKey && now - lastSpeechTime < SPEAK_GAP_MS) {
+    return;
+  }
+
+  // ❌ ANY speech too soon → ignore
+  if (now - lastSpeechTime < SPEAK_GAP_MS) {
+    return;
+  }
+
+  speakNow(message);
+
+  lastSpeechKey = speechKey;
+  lastSpeechTime = now;
+}
+
+
 function speakNow(message) {
   window.speechSynthesis.cancel();
 
@@ -194,12 +184,10 @@ function speakNow(message) {
   utterance.volume = 1.0;
 
   window.speechSynthesis.speak(utterance);
-
-  lastSpokenMessage = message;
-  lastSpokenTime = Date.now();
 }
 
 
+// ================= LOOP =================
 async function detectionLoop() {
   while (video.srcObject) {
     await sendFrame();
@@ -216,6 +204,7 @@ function startDetection() {
 }
 
 
+// ================= EVENTS =================
 document.addEventListener("DOMContentLoaded", () => {
   document.body.addEventListener("click", unlockAudio, { once: true });
   document.body.addEventListener("touchstart", unlockAudio, { once: true });
