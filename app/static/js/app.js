@@ -10,13 +10,39 @@ let stream = null;
 let detectionInterval = null;
 let isSending = false;
 
+let audioUnlocked = false;
+
 let lastSpokenMessage = "";
 let lastSpokenTime = 0;
+
+let lastReceivedMessage = "";
+let lastChangeTime = 0;
+
+const STABLE_SPEAK_DELAY = 5000; // speak again if same instruction stays for 5 seconds
+
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+
+  audioUnlocked = true;
+
+  window.speechSynthesis.cancel();
+
+  const test = new SpeechSynthesisUtterance("Audio ready");
+  test.lang = "en-US";
+  test.volume = 1;
+  test.rate = 1.0;
+
+  window.speechSynthesis.speak(test);
+}
+
 
 function setStatus(text) {
   if (statusText) statusText.textContent = text;
   if (overlayStatus) overlayStatus.textContent = text;
 }
+
+
 // Initialize the camera and start the video stream
 async function startCamera() {
   try {
@@ -39,15 +65,19 @@ async function startCamera() {
 
     setStatus("Guidance active");
     startDetection();
+
   } catch (error) {
     console.error("Camera error:", error);
     setStatus("Camera unavailable");
+
     if (messageText) {
       messageText.textContent = "Please allow camera access to begin navigation.";
     }
   }
 }
-// Capture the current video frame and return it as a base64-encoded JPEG image
+
+
+// Capture the current video frame and return it as a base64 image
 function captureFrame() {
   const context = canvas.getContext("2d");
 
@@ -62,7 +92,9 @@ function captureFrame() {
 
   return canvas.toDataURL("image/jpeg", 0.45);
 }
-// Send the captured frame to the ml service for prediction and handle the response
+
+
+// Send frame to backend/ML service
 async function sendFrame() {
   if (isSending) return;
   if (!video.srcObject) return;
@@ -89,9 +121,11 @@ async function sendFrame() {
       return;
     }
 
-    const decision = result.decision || "---";
-    const message = result.message || "No guidance available";
-    const cooldown = result.cooldown || 3;
+    const decision = result.final_decision || result.decision || "---";
+    const message =
+      result.final_message ||
+      result.message ||
+      "No guidance available";
 
     if (decisionText) {
       decisionText.textContent = decision;
@@ -102,31 +136,59 @@ async function sendFrame() {
     }
 
     setStatus("Guidance active");
-    speakMessage(message, cooldown);
+    speakMessage(message);
+
   } catch (error) {
     console.error("Send frame error:", error);
     setStatus("Connection error");
+
   } finally {
     isSending = false;
   }
 }
 
-function speakMessage(message, cooldownSeconds = 3) {
+
+// Decides WHEN to speak
+function speakMessage(message) {
   if (!message) return;
 
+  // iPhone needs a tap first before speech can work
+  if (!audioUnlocked) return;
+
   const now = Date.now();
-  const cooldownMs = cooldownSeconds * 1000;
 
-  const repeatedTooSoon =
-    message === lastSpokenMessage && now - lastSpokenTime < cooldownMs;
-
-  if (repeatedTooSoon) {
+  // first instruction ever
+  if (!lastReceivedMessage) {
+    speakNow(message);
+    lastReceivedMessage = message;
+    lastChangeTime = now;
     return;
   }
 
+  // speak immediately if instruction changes
+  if (message !== lastReceivedMessage) {
+    speakNow(message);
+    lastReceivedMessage = message;
+    lastChangeTime = now;
+    return;
+  }
+
+  // if same instruction remains for 5 seconds, remind the user
+  const timeSinceLastRepeat = now - lastChangeTime;
+
+  if (timeSinceLastRepeat >= STABLE_SPEAK_DELAY) {
+    speakNow(message);
+    lastChangeTime = now;
+  }
+}
+
+
+// Actually speaks the message
+function speakNow(message) {
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = "en-US";
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
@@ -134,21 +196,31 @@ function speakMessage(message, cooldownSeconds = 3) {
   window.speechSynthesis.speak(utterance);
 
   lastSpokenMessage = message;
-  lastSpokenTime = now;
+  lastSpokenTime = Date.now();
 }
+
 
 async function detectionLoop() {
   while (video.srcObject) {
-    await sendFrame(); // wait until request finishes
-    await new Promise((r) => setTimeout(r, 150)); // small delay
+    await sendFrame();
+    await new Promise((r) => setTimeout(r, 150));
   }
 }
 
+
 function startDetection() {
   if (detectionInterval) return;
-  detectionInterval = true; // just a flag now
+
+  detectionInterval = true;
   detectionLoop();
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.body.addEventListener("click", unlockAudio, { once: true });
+  document.body.addEventListener("touchstart", unlockAudio, { once: true });
+});
+
 
 window.addEventListener("load", () => {
   startCamera();

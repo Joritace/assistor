@@ -38,5 +38,11 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+document.addEventListener("DOMContentLoaded", () => {
+    document.body.addEventListener("click", unlockAudio, { once: true });
+    document.body.addEventListener("touchstart", unlockAudio, { once: true });
+});
+</script>
 </body>
 </html>
