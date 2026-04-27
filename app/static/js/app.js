@@ -138,7 +138,7 @@ function cleanMessage(message) {
     .replace(/\s+/g, " ");
 }
 
-function speakMessage(message, cooldownSeconds = 5) {
+function speakMessage(message, cooldownSeconds = 8) {
   if (!message) return;
   if (!audioUnlocked) return;
 
